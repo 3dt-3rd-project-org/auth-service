@@ -1,0 +1,20 @@
+{
+  "name": "readpoint-auth-service",
+  "version": "1.0.0",
+  "description": "구글 인증 및 JWT 발급 마이크로서비스",
+  "main": "src/functions/*.js",
+  "type": "module",
+  "scripts": {
+    "start": "func start --port 7071",
+    "test": "echo \"No tests defined\""
+  },
+  "dependencies": {
+    "@azure/functions": "^4.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.12.0",
+    "winston": "^3.13.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
