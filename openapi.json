@@ -1,0 +1,134 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "ReadPoint Auth Service API",
+    "description": "구글 인증 및 JWT 발급 마이크로서비스 API 명세",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://<your-auth-service-function-app>.azurewebsites.net/api",
+      "description": "배포된 Auth Service Azure Function App 주소"
+    }
+  ],
+  "paths": {
+    "/auth/user/google": {
+      "get": {
+        "summary": "일반 사용자 구글 로그인 리다이렉트 URL 생성",
+        "description": "구글 OAuth 로그인 페이지로 리다이렉트하는 URL을 반환하거나 302 리다이렉트합니다.",
+        "responses": {
+          "302": {
+            "description": "구글 로그인 페이지로 리다이렉트"
+          }
+        }
+      }
+    },
+    "/auth/user/google/callback": {
+      "get": {
+        "summary": "일반 사용자 구글 로그인 콜백",
+        "description": "구글 OAuth 인증 완료 후 수신되는 콜백 엔드포인트입니다. JWT 토큰을 발급합니다.",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "required": true,
+            "description": "구글 인가 코드",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "로그인 성공 및 JWT 토큰 반환",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": { "type": "string" },
+                    "token": { "type": "string" },
+                    "user": {
+                      "type": "object",
+                      "properties": {
+                        "id": { "type": "integer" },
+                        "email": { "type": "string" },
+                        "nickname": { "type": "string" },
+                        "role": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "잘못된 요청 (인가 코드 누락 등)"
+          },
+          "500": {
+            "description": "서버 내부 오류"
+          }
+        }
+      }
+    },
+    "/auth/admin/google": {
+      "get": {
+        "summary": "관리자 구글 로그인 리다이렉트 URL 생성",
+        "description": "관리자용 구글 OAuth 로그인 페이지로 리다이렉트하는 URL을 반환하거나 302 리다이렉트합니다.",
+        "responses": {
+          "302": {
+            "description": "관리자 구글 로그인 페이지로 리다이렉트"
+          }
+        }
+      }
+    },
+    "/auth/admin/google/callback": {
+      "get": {
+        "summary": "관리자 구글 로그인 콜백",
+        "description": "관리자용 구글 OAuth 인증 완료 후 수신되는 콜백 엔드포인트입니다. ADMIN 권한의 JWT 토큰을 발급합니다.",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "required": true,
+            "description": "구글 인가 코드",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "로그인 성공 및 JWT 토큰 반환",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": { "type": "string" },
+                    "token": { "type": "string" },
+                    "user": {
+                      "type": "object",
+                      "properties": {
+                        "id": { "type": "integer" },
+                        "email": { "type": "string" },
+                        "nickname": { "type": "string" },
+                        "role": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "잘못된 요청"
+          },
+          "500": {
+            "description": "서버 내부 오류"
+          }
+        }
+      }
+    }
+  }
+}
