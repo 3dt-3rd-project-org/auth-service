@@ -2,6 +2,7 @@ import { app } from '@azure/functions';
 import jwt from 'jsonwebtoken';
 import { dbPool } from '../config/db.js';
 import { logger } from '../utils/logger.js';
+import { handleSuccess, handleError } from '../shared/responseHelper.js';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
@@ -120,22 +121,13 @@ app.http('userGoogleCallback', {
         };
       }
 
-      return {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: '일반 독자용 Google 로그인에 성공하여 토큰이 발급되었습니다.',
-          token: bearerToken,
-          user: { id: user.id, email: user.email, nickname: user.nickname, role: user.role }
-        })
-      };
+      return handleSuccess({
+        message: '일반 독자용 Google 로그인에 성공하여 토큰이 발급되었습니다.',
+        token: bearerToken,
+        user: { id: user.id, email: user.email, nickname: user.nickname, role: user.role }
+      });
     } catch (err) {
-      logger.error(`[Google OAuth USER Callback Error]: ${err.message}`);
-      return {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ error: 'Internal Server Error', message: err.message })
-      };
+      return handleError(err, logger, 'Google OAuth USER Callback');
     }
   }
 });
@@ -254,22 +246,13 @@ app.http('adminGoogleCallback', {
         };
       }
 
-      return {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: '시스템 관리자용 Google 로그인에 성공하여 토큰이 발급되었습니다.',
-          token: bearerToken,
-          user: { id: user.id, email: user.email, nickname: user.nickname, role: user.role }
-        })
-      };
+      return handleSuccess({
+        message: '시스템 관리자용 Google 로그인에 성공하여 토큰이 발급되었습니다.',
+        token: bearerToken,
+        user: { id: user.id, email: user.email, nickname: user.nickname, role: user.role }
+      });
     } catch (err) {
-      logger.error(`[Google OAuth ADMIN Callback Error]: ${err.message}`);
-      return {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ error: 'Internal Server Error', message: err.message })
-      };
+      return handleError(err, logger, 'Google OAuth ADMIN Callback');
     }
   }
 });
