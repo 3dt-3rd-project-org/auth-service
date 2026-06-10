@@ -71,7 +71,7 @@ app.http('userGoogleLoginPost', {
       }
 
       const tokenData = await tokenResponse.json();
-      
+
       const profileUrl = 'https://www.googleapis.com/oauth2/v3/userinfo';
       const profileResponse = await fetch(profileUrl, {
         headers: { 'Authorization': `Bearer ${tokenData.access_token}` }
@@ -83,7 +83,7 @@ app.http('userGoogleLoginPost', {
 
       const profileData = await profileResponse.json();
       logger.info(`[Auth User Login] 구글 프로필 정보 수신 완료 (Email: ${profileData.email})`);
-      
+
       const googleUser = {
         google_id: profileData.sub,
         email: profileData.email,
@@ -107,7 +107,7 @@ app.http('userGoogleLoginPost', {
         JWT_SECRET,
         { expiresIn: '24h' }
       );
-      
+
       const bearerToken = `Bearer ${token}`;
       logger.info(`[Auth User Login] DB 사용자 적재 및 JWT 발급 완료 (User ID: ${user.id}, Role: USER)`);
 
@@ -183,7 +183,7 @@ app.http('adminGoogleLoginPost', {
       }
 
       const tokenData = await tokenResponse.json();
-      
+
       const profileUrl = 'https://www.googleapis.com/oauth2/v3/userinfo';
       const profileResponse = await fetch(profileUrl, {
         headers: { 'Authorization': `Bearer ${tokenData.access_token}` }
@@ -195,7 +195,7 @@ app.http('adminGoogleLoginPost', {
 
       const profileData = await profileResponse.json();
       logger.info(`[Auth Admin Login] 구글 프로필 정보 수신 완료 (Email: ${profileData.email})`);
-      
+
       const googleUser = {
         google_id: profileData.sub,
         email: profileData.email,
@@ -203,27 +203,59 @@ app.http('adminGoogleLoginPost', {
         role: 'ADMIN'
       };
 
-      // [임시 테스트용] 빠른 로컬/프론트 연동 테스트를 위해 approved = true 강제 인서트
-      const result = await dbPool.query(
-        `INSERT INTO users (google_id, email, nickname, role, approved, created_at)
-         VALUES ($1, $2, $3, $4, true, CURRENT_TIMESTAMP)
-         ON CONFLICT (email) DO UPDATE 
-           SET nickname = EXCLUDED.nickname, 
-               google_id = EXCLUDED.google_id,
-               role = EXCLUDED.role,
-               approved = true
-         RETURNING *`,
-        [googleUser.google_id, googleUser.email, googleUser.nickname, googleUser.role]
+      // 1. 기존 사용자가 있는지 먼저 조회
+      const selectResult = await dbPool.query(
+        "SELECT * FROM users WHERE email = $1",
+        [googleUser.email]
       );
 
-      const user = result.rows[0];
+      let user = selectResult.rows[0];
 
+      if (!user) {
+        // 2. 존재하지 않는다면 최초 가입이므로 approved = false 로 인서트
+        const insertResult = await dbPool.query(
+          `INSERT INTO users (google_id, email, nickname, role, approved, created_at)
+           VALUES ($1, $2, $3, $4, false, CURRENT_TIMESTAMP)
+           RETURNING *`,
+          [googleUser.google_id, googleUser.email, googleUser.nickname, googleUser.role]
+        );
+        user = insertResult.rows[0];
+        logger.info(`[Auth Admin Login] 신규 관리자 가입 요청 접수 (Email: ${user.email}, Approved: false)`);
+
+        // Teams로 승인 카드 요청 발송
+        await sendTeamsApprovalCard(user);
+
+        return {
+          status: 202,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: '최초 로그인 요청으로 관리자 가입 승인 요청이 발송되었습니다. 승인 후 로그인해 주세요.',
+            approved: false
+          })
+        };
+      }
+
+      // 3. 존재하지만 승인되지 않은 경우
+      if (!user.approved) {
+        logger.info(`[Auth Admin Login] 승인 대기 중인 관리자 로그인 시도 (Email: ${user.email})`);
+        return {
+          status: 403,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            error: 'Forbidden',
+            message: '아직 가입 승인 대기 중입니다. Teams 승인 완료 후 다시 시도해주세요.',
+            approved: false
+          })
+        };
+      }
+
+      // 4. 이미 승인된 경우에만 JWT 발급 및 로그인 허용
       const token = jwt.sign(
         { id: user.id, email: user.email, role: 'ADMIN' },
         JWT_SECRET,
         { expiresIn: '24h' }
       );
-      
+
       const bearerToken = `Bearer ${token}`;
       logger.info(`[Auth Admin Login] DB 사용자 적재 및 어드민 JWT 발급 완료 (User ID: ${user.id}, Role: ADMIN)`);
 
@@ -240,14 +272,24 @@ app.http('adminGoogleLoginPost', {
 
 // 5. Teams 승인 수락 처리 API (사전 구현)
 app.http('adminApprove', {
-  methods: ['POST'],
+  methods: ['POST', 'GET'],
   authLevel: 'anonymous',
   route: 'auth/admin/approve',
   handler: async (request, context) => {
     logger.info('[Auth Admin Approve] Teams 관리자 승인 요청 접수');
     try {
-      const reqBody = await request.json();
-      const { email, token } = reqBody;
+      let email, token;
+
+      if (request.method === 'GET') {
+        // GET 요청인 경우 쿼리 파라미터에서 추출
+        email = request.query.get('email');
+        token = request.query.get('token');
+      } else {
+        // POST 요청인 경우 기존처럼 JSON 바디에서 추출
+        const reqBody = await request.json();
+        email = reqBody.email;
+        token = reqBody.token;
+      }
 
       if (!email || !token) {
         return {
@@ -286,6 +328,21 @@ app.http('adminApprove', {
       const approvedUser = result.rows[0];
       logger.info(`[Auth Admin Approve] 관리자 ${approvedUser.email}의 가입 승인이 성공적으로 완료되었습니다.`);
 
+      // GET 요청의 경우 브라우저 렌더링용 HTML 반환
+      if (request.method === 'GET') {
+        return {
+          status: 200,
+          headers: { 'Content-Type': 'text/html; charset=utf-8' },
+          body: `
+            <div style="font-family: sans-serif; text-align: center; margin-top: 50px;">
+              <h2 style="color: #0284c7;">🔑 관리자 가입 승인 완료</h2>
+              <p>관리자 <strong>${approvedUser.nickname} (${approvedUser.email})</strong>의 가입 승인이 완료되었습니다.</p>
+              <p style="color: #64748b;">이제 로그인 화면으로 돌아가 로그인하실 수 있습니다.</p>
+            </div>
+          `
+        };
+      }
+
       return {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
@@ -311,6 +368,7 @@ async function sendTeamsApprovalCard(user) {
 
   const serviceDomain = process.env.SERVICE_DOMAIN || 'http://localhost:7071';
   const approveUrl = `${serviceDomain}/api/auth/admin/approve`;
+  const approveUrlGet = `${serviceDomain}/api/auth/admin/approve?email=${encodeURIComponent(user.email)}&token=${secureToken}`;
 
   const payload = {
     "@type": "MessageCard",
@@ -320,6 +378,7 @@ async function sendTeamsApprovalCard(user) {
     "sections": [{
       "activityTitle": "🔑 신규 관리자 가입 승인 요청",
       "activitySubtitle": "ReadPoint Admin Console",
+      "text": `버튼이 표시되지 않는 경우, [여기 클릭하여 가입 승인](${approveUrlGet}) 링크를 눌러 승인해 주세요.`,
       "facts": [
         { "name": "닉네임", "value": user.nickname },
         { "name": "이메일", "value": user.email }
