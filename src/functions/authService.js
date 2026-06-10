@@ -367,8 +367,8 @@ async function sendTeamsApprovalCard(user) {
   const secureToken = crypto.createHmac('sha256', JWT_SECRET).update(user.email).digest('hex');
 
   const serviceDomain = process.env.SERVICE_DOMAIN || 'http://localhost:7071';
-  const approveUrl = `${serviceDomain}/api/auth/admin/approve`;
-  const approveUrlGet = `${serviceDomain}/api/auth/admin/approve?email=${encodeURIComponent(user.email)}&token=${secureToken}`;
+  const approveUrl = `${serviceDomain}/auth/admin/approve`;
+  const approveUrlGet = `${serviceDomain}/auth/admin/approve?email=${encodeURIComponent(user.email)}&token=${secureToken}`;
 
   const payload = {
     "@type": "MessageCard",

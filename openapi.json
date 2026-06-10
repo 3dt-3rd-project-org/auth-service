@@ -132,7 +132,7 @@
     },
     "/auth/admin/approve": {
       "post": {
-        "summary": "관리자 가입 승인 처리",
+        "summary": "관리자 가입 승인 처리 (POST)",
         "description": "MS Teams 채널 등으로부터 전달받은 보안 서명 토큰을 대조 검증하여 관리자 가입 승인(approved = true)을 완료합니다.",
         "requestBody": {
           "required": true,
@@ -158,6 +158,54 @@
         "responses": {
           "200": {
             "description": "승인 처리 완료"
+          },
+          "400": {
+            "description": "필수 파라미터 누락"
+          },
+          "403": {
+            "description": "유효하지 않은 서명 토큰"
+          },
+          "404": {
+            "description": "존재하지 않는 관리자 이메일"
+          },
+          "500": {
+            "description": "서버 내부 오류"
+          }
+        }
+      },
+      "get": {
+        "summary": "관리자 가입 승인 처리 (GET)",
+        "description": "이메일 링크 클릭을 통한 GET 요청을 받아 보안 서명 토큰을 대조 검증하여 관리자 가입 승인을 완료하고 안내 HTML을 응답합니다.",
+        "parameters": [
+          {
+            "name": "email",
+            "in": "query",
+            "required": true,
+            "description": "승인할 관리자 이메일",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": true,
+            "description": "HMAC 보안 서명 토큰",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "승인 처리 완료 (HTML 응답)",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           },
           "400": {
             "description": "필수 파라미터 누락"
