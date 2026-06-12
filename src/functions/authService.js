@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import { dbPool } from '../config/db.js';
 import { logger } from '../utils/logger.js';
 import { handleSuccess, handleError } from '../shared/responseHelper.js';
+import { authenticateToken } from '../shared/authHelper.js';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
@@ -413,3 +414,81 @@ async function sendTeamsApprovalCard(user) {
     logger.error(`[Teams Notification Error] Teams 알림 발송 중 오류: ${err.message}`);
   }
 }
+
+// 6. 일반 사용자 회원탈퇴 API
+app.http('withdrawUser', {
+  methods: ['DELETE'],
+  authLevel: 'anonymous',
+  route: 'auth/withdraw',
+  handler: async (request, context) => {
+    logger.info('[Auth Withdrawal] 일반 사용자 회원탈퇴 요청 접수');
+
+    // 1. 토큰 검증 및 사용자 정보 추출
+    let user;
+    try {
+      user = authenticateToken(request);
+      logger.info(`[Auth Withdrawal] 인증 완료 - User ID: ${user.id}, Role: ${user.role}`);
+    } catch (authErr) {
+      return {
+        status: authErr.status || 401,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(authErr.body || { error: authErr.message })
+      };
+    }
+
+    // 2. 관리자(ADMIN) 탈퇴 차단
+    if (user.role === 'ADMIN') {
+      logger.warn(`[Auth Withdrawal] 관리자(ADMIN) 계정 탈퇴 시도 차단됨 (User ID: ${user.id})`);
+      return {
+        status: 403,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          error: 'Forbidden',
+          message: '관리자 계정은 회원탈퇴가 불가능합니다.'
+        })
+      };
+    }
+
+    const client = await dbPool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // 3. 일반 사용자 독서 로그 제거
+      await client.query(
+        'DELETE FROM reading_logs WHERE user_id = $1',
+        [user.id]
+      );
+
+      // 4. 사용자 삭제
+      const deleteResult = await client.query(
+        "DELETE FROM users WHERE id = $1 AND role = 'USER' RETURNING id, email, nickname",
+        [user.id]
+      );
+
+      if (deleteResult.rows.length === 0) {
+        throw { status: 404, message: '존재하지 않거나 이미 탈퇴 처리된 사용자 계정입니다.' };
+      }
+
+      await client.query('COMMIT');
+      logger.info(`[Auth Withdrawal] 회원탈퇴 처리 성공 (User ID: ${user.id})`);
+
+      return handleSuccess({
+        message: '회원탈퇴가 성공적으로 완료되었습니다. 그동안 이용해 주셔서 감사합니다.',
+        user: deleteResult.rows[0]
+      });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      if (err.status) {
+        return {
+          status: err.status,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: err.message })
+        };
+      }
+      return handleError(err, logger, 'User Withdrawal');
+    } finally {
+      client.release();
+    }
+  }
+});
+
