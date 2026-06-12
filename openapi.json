@@ -221,6 +221,58 @@
           }
         }
       }
+    },
+    "/auth/withdraw": {
+      "delete": {
+        "summary": "일반 사용자 회원탈퇴",
+        "description": "일반 사용자 계정을 완전히 삭제하고 독서 로그를 정리합니다. 관리자 계정은 회원탈퇴를 차단합니다.",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": true,
+            "description": "Bearer 사용자 JWT 토큰",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "회원탈퇴 성공",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": { "type": "string" },
+                    "user": {
+                      "type": "object",
+                      "properties": {
+                        "id": { "type": "string" },
+                        "email": { "type": "string" },
+                        "nickname": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "인증 토큰 누락"
+          },
+          "403": {
+            "description": "관리자 계정 회원탈퇴 요청 차단"
+          },
+          "404": {
+            "description": "존재하지 않는 유저"
+          },
+          "500": {
+            "description": "서버 내부 오류"
+          }
+        }
+      }
     }
   }
 }
